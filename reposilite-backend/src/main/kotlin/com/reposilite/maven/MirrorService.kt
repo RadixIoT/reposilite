@@ -40,6 +40,10 @@ internal class MirrorService(
     private val clock: Clock
 ) : Journalist {
 
+    companion object {
+        private val mirrorPathRegex = Regex("(.+)/(.+)/(.+)/\\2-\\3(?:-([A-Za-z0-9_-]+))?(\\..+)")
+    }
+
     fun shouldPrioritizeMirrorRepository(repository: Repository, gav: Location): Boolean =
         when {
             repository.storagePolicy == PRIORITIZE_UPSTREAM_METADATA && gav.getSimpleName().contains(METADATA_FILE) ->
@@ -88,11 +92,12 @@ internal class MirrorService(
 
     private enum class DisallowedReason {
         EXTENSION,
-        GROUP
+        GROUP,
+        CLASSIFIER
     }
 
     private fun isAllowed(config: MirroredRepositorySettings, gav: Location): Result<Blank, DisallowedReason> =
-        isAllowedExtension(config, gav).flatMap { isAllowedGroup(config, gav) }
+        isAllowedExtension(config, gav).flatMap { isAllowedGroup(config, gav) }.flatMap { isAllowedClassifier(config, gav) }
 
     private fun isAllowedExtension(config: MirroredRepositorySettings, gav: Location): Result<Blank, DisallowedReason> =
         when {
@@ -107,6 +112,21 @@ internal class MirrorService(
             config.allowedGroups.any { gav.toString().startsWith(it.replace('.', '/')) } -> ok()
             else -> error(DisallowedReason.GROUP)
         }
+
+    private fun isAllowedClassifier(config: MirroredRepositorySettings, gav: Location): Result<Blank, DisallowedReason> {
+        if (config.allowedClassifiers.isEmpty()) return ok()
+
+        val matches = mirrorPathRegex.find(gav.toPath().toString())
+        if (matches != null) {
+            val classifier = matches.groupValues[4]
+            val classifierMatches = config.allowedClassifiers.any { it == classifier }
+            if (classifierMatches) {
+                return ok()
+            }
+        }
+
+        return error(DisallowedReason.CLASSIFIER)
+    }
 
     override fun getLogger(): Logger =
         journalist.logger
