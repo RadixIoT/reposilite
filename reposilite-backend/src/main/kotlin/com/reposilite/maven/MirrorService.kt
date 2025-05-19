@@ -116,6 +116,11 @@ internal class MirrorService(
     private fun isAllowedClassifier(config: MirroredRepositorySettings, gav: Location): Result<Blank, DisallowedReason> {
         if (config.allowedClassifiers.isEmpty()) return ok()
 
+        val fileName = gav.getSimpleName()
+        if (fileName == "maven-metadata.xml") {
+            return ok()
+        }
+
         val matches = mirrorPathRegex.find(gav.toPath().toString())
         if (matches != null) {
             val classifier = matches.groupValues[4]
